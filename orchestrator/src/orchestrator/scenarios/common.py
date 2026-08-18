@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple
 
+from orchestrator.engine.context import ExecutionContext
+from orchestrator.observability.metrics import ReliabilityMetrics
+
 
 @dataclass
 class FileChange:
@@ -62,3 +65,62 @@ def run_maven_test(repo_root: str, timeout: int = 300) -> Tuple[bool, str]:
     )
     output = (result.stdout or "") + (result.stderr or "")
     return result.returncode == 0, output
+
+
+def render_run_summary(
+    scenario_name: str,
+    requirement: str,
+    branch_name: str,
+    context: ExecutionContext,
+    metrics: ReliabilityMetrics,
+    risks: List[str],
+    assumptions: List[str],
+    limitations: List[str],
+) -> str:
+    lineage_lines = "\n".join(
+        f"{i}. **{d.stage}** — {d.summary}\n   - *Rationale:* {d.rationale}"
+        for i, d in enumerate(context.lineage, start=1)
+    ) or "_(no decisions recorded)_"
+
+    risks_lines = "\n".join(f"- {r}" for r in risks) or "_(none identified)_"
+    assumptions_lines = "\n".join(f"- {a}" for a in assumptions) or "_(none)_"
+    limitations_lines = "\n".join(f"- {l}" for l in limitations) or "_(none)_"
+
+    return f"""# Run summary: {scenario_name}
+
+**Requirement:** {requirement}
+**Branch:** `{branch_name}`
+**Run ID:** {context.run_id}
+
+## Decision lineage
+
+{lineage_lines}
+
+## Reliability metrics
+
+| Metric | Value |
+|---|---|
+| Success rate | {metrics.success_rate * 100:.0f}% ({metrics.succeeded_nodes}/{metrics.total_nodes} nodes) |
+| Retries | {metrics.retry_count} |
+| Rollbacks | {metrics.rollback_count} |
+| MTTR | {f"{metrics.mttr_seconds:.2f}s" if metrics.mttr_seconds is not None else "n/a"} |
+| Total latency | {f"{metrics.total_latency_seconds:.2f}s" if metrics.total_latency_seconds is not None else "n/a"} |
+
+## Risks & trade-offs
+
+{risks_lines}
+
+## Assumptions
+
+{assumptions_lines}
+
+## Limitations
+
+{limitations_lines}
+"""
+
+
+def write_run_summary(path: Path, **kwargs) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_run_summary(**kwargs))
