@@ -73,6 +73,43 @@ async def test_greenfield_dag_runs_to_completion_with_auto_approval():
     assert dag.nodes["finalize"].status == NodeStatus.SUCCEEDED
 
 
+def test_apply_functions_are_idempotent_on_a_real_repo_run(tmp_path):
+    """Regression test for a real bug found while manually running the
+    scenario twice against the same branch: applying the same string-based
+    patch a second time duplicated the import/method (since the anchor text
+    was still present inside the already-modified content), which broke
+    Java compilation. Each _apply_* function must now be a no-op when its
+    change is already present.
+    """
+    from orchestrator.scenarios.greenfield_qr_code import (
+        _apply_controller_changes,
+        _apply_controller_test_changes,
+        _apply_pom_changes,
+        _apply_readme_changes,
+    )
+
+    controller = (
+        "import com.urlshortener.service.UrlService;\n"
+        "import org.springframework.http.HttpHeaders;\n\n"
+        "    private final UrlService urlService;\n\n"
+        "    public UrlController(UrlService urlService) {\n"
+        "        this.urlService = urlService;\n"
+        "    }\n\n"
+        "    @PutMapping(\"/api/v1/urls/{shortCode}\")\n"
+    )
+    once = _apply_controller_changes(controller)
+    twice = _apply_controller_changes(once)
+    assert once == twice
+    assert twice.count("getQrCode") == 1
+    assert twice.count("import com.urlshortener.service.QrCodeService;") == 1
+
+    pom = "        <dependency>\n            <groupId>com.h2database</groupId>\n            <artifactId>h2</artifactId>\n            <scope>runtime</scope>\n        </dependency>\n"
+    pom_once = _apply_pom_changes(pom)
+    pom_twice = _apply_pom_changes(pom_once)
+    assert pom_once == pom_twice
+    assert pom_twice.count("com.google.zxing") == 2  # core + javase, each once
+
+
 @pytest.mark.asyncio
 async def test_greenfield_dag_blocks_at_release_when_approval_denied():
     from orchestrator.engine.approval import auto_deny

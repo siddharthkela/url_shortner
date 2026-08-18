@@ -408,6 +408,8 @@ class QrCodeServiceTest {
 
 
 def _apply_controller_changes(original: str) -> str:
+    if "QrCodeService" in original:
+        return original  # already applied (e.g. re-running against an existing branch) — no-op
     updated = original.replace(
         "import com.urlshortener.service.UrlService;",
         "import com.urlshortener.service.QrCodeService;\nimport com.urlshortener.service.UrlService;",
@@ -438,6 +440,8 @@ def _apply_controller_changes(original: str) -> str:
 
 
 def _apply_pom_changes(original: str) -> str:
+    if "com.google.zxing" in original:
+        return original  # already applied — no-op
     anchor = (
         "        <dependency>\n"
         "            <groupId>com.h2database</groupId>\n"
@@ -462,6 +466,8 @@ def _apply_pom_changes(original: str) -> str:
 
 
 def _apply_controller_test_changes(original: str) -> str:
+    if "QrCodeService" in original:
+        return original  # already applied — no-op
     updated = original.replace(
         "import com.urlshortener.service.UrlService;",
         "import com.urlshortener.service.QrCodeService;\nimport com.urlshortener.service.UrlService;",
@@ -503,6 +509,8 @@ def _apply_controller_test_changes(original: str) -> str:
 
 
 def _apply_readme_changes(original: str) -> str:
+    if "qrcode" in original:
+        return original  # already applied — no-op
     updated = original.replace(
         "| `GET` | `/api/v1/urls/{shortCode}/analytics` | Click count, first/last accessed timestamps. |\n",
         "| `GET` | `/api/v1/urls/{shortCode}/analytics` | Click count, first/last accessed timestamps. |\n"
