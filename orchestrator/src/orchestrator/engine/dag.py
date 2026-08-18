@@ -180,6 +180,7 @@ class Scheduler:
             dag, context, new_nodes, new_edges, reason
         )
 
+        self.event_sink.emit("run_started", run_id=context.run_id)
         while True:
             if self.circuit_breaker is not None and self.circuit_breaker.should_trip():
                 self._safe_stop(dag)
@@ -191,7 +192,9 @@ class Scheduler:
             self.event_sink.emit("tick_ready", run_id=context.run_id, node_ids=[n.id for n in ready])
             await asyncio.gather(*(self._execute_node(node, dag, context) for node in ready))
 
-        return RunResult(context=context, dag=dag)
+        result = RunResult(context=context, dag=dag)
+        self.event_sink.emit("run_completed", run_id=context.run_id, succeeded=result.succeeded, status_summary=result.status_summary())
+        return result
 
     def _safe_stop(self, dag: DAG) -> None:
         for node in dag.nodes.values():

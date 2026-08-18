@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, List, Optional
 
 from orchestrator.engine.context import ExecutionContext
-from orchestrator.engine.dag import Node, NodeResult
+from orchestrator.engine.dag import EventSink, Node, NodeResult
 
 SleepFn = Callable[[float], Awaitable[None]]
 
@@ -24,8 +24,14 @@ class RetryPolicy:
     multiplier: float = 2.0
 
 
-def make_retrying_executor(sleep_fn: SleepFn = asyncio.sleep):
-    """Returns a retry_executor compatible with Scheduler(retry_executor=...)."""
+def make_retrying_executor(sleep_fn: SleepFn = asyncio.sleep, event_sink: Optional[EventSink] = None):
+    """Returns a retry_executor compatible with Scheduler(retry_executor=...).
+
+    Emits a "node_retry_attempt" event on every failed-but-not-final attempt
+    so the event log carries enough information for metrics.py to compute
+    retry frequency and MTTR without needing to inspect Node state directly.
+    """
+    sink = event_sink or EventSink()
 
     async def _execute(node: Node, context: ExecutionContext) -> NodeResult:
         policy = node.retry_policy or RetryPolicy(max_attempts=1)
@@ -44,6 +50,7 @@ def make_retrying_executor(sleep_fn: SleepFn = asyncio.sleep):
 
             last_result = result
             if attempt < policy.max_attempts:
+                sink.emit("node_retry_attempt", node_id=node.id, attempt=attempt, error=result.error)
                 if backoff > 0:
                     await sleep_fn(backoff)
                 backoff *= policy.multiplier
