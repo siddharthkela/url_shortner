@@ -20,6 +20,28 @@ def test_no_secrets_committed_ignores_clean_file():
     assert no_secrets_committed(ctx) == []
 
 
+def test_no_secrets_committed_does_not_flag_camelcase_token_variable_assignment():
+    """Regression test: a real end-to-end orchestrator run flagged
+    `UUID ownerToken = UUID.randomUUID();` in UrlServiceTest.java as a
+    possible hardcoded secret — "token" substring-matches "ownerToken"
+    (camelCase has no regex word boundary there) and the unquoted method
+    call satisfied the old optionally-quoted value pattern. Real secrets in
+    code/config are quoted string literals; a bare method-call expression
+    is not one.
+    """
+    ctx = PolicyContext(file_contents={
+        "UrlServiceTest.java": "UUID ownerToken = UUID.randomUUID();",
+    })
+    assert no_secrets_committed(ctx) == []
+
+
+def test_no_secrets_committed_still_flags_quoted_token_value():
+    ctx = PolicyContext(file_contents={"config.yml": 'auth_token: "abcdef1234567890"'})
+    violations = no_secrets_committed(ctx)
+    assert len(violations) == 1
+    assert violations[0].severity == "CRITICAL"
+
+
 def test_no_writes_outside_repo_flags_escaping_path():
     ctx = PolicyContext(repo_root="/repo", touches_files=["src/Main.java", "../../etc/passwd"])
     violations = no_writes_outside_repo(ctx)

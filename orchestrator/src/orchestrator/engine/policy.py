@@ -10,8 +10,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional
 
+# Requires the value to be a *quoted string literal*, not just optionally
+# quoted — real hardcoded secrets in config/code look like `api_key: "sk-..."`.
+# An unquoted match also fires on ordinary code like `ownerToken =
+# UUID.randomUUID()`, since "token" is a substring match (camelCase has no
+# regex word boundary between "owner" and "Token") and "UUID.randomUUID"
+# alone satisfies the character-class length check — a real false positive
+# found by actually running this against real Java test source, not a
+# hypothetical.
 SECRET_PATTERN = re.compile(
-    r"(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*[\"']?[A-Za-z0-9/+_\-\.]{8,}[\"']?"
+    r"(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*[\"'][A-Za-z0-9/+_\-\.]{8,}[\"']"
 )
 
 DESTRUCTIVE_GIT_COMMANDS = {"push --force", "push -f", "reset --hard", "clean -fdx", "branch -D"}
