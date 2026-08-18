@@ -52,7 +52,7 @@ All endpoints are under `/api/v1/urls` except the redirect itself.
 | `POST` | `/api/v1/urls` | Create a short URL. Optional `Idempotency-Key` header. |
 | `GET` | `/{shortCode}` | Redirects (`302`) to the original URL. `404` if unknown, `410` if expired. |
 | `GET` | `/api/v1/urls/{shortCode}` | Fetch details. |
-| `GET` | `/api/v1/urls/{shortCode}/analytics` | Click count, first/last accessed timestamps. |
+| `GET` | `/api/v1/urls/{shortCode}/analytics` | Click count, first/last accessed timestamps, `daysActive`, `averageClicksPerDay`. |
 | `PUT` | `/api/v1/urls/{shortCode}` | Update target URL / expiration. Requires `X-Owner-Token` header. |
 | `DELETE` | `/api/v1/urls/{shortCode}` | Soft delete. Requires `X-Owner-Token` header. |
 

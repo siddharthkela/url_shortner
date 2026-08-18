@@ -225,6 +225,8 @@ class UrlServiceTest {
         assertThat(response.clickCount()).isEqualTo(7);
         assertThat(response.firstAccessedAt()).isEqualTo(first);
         assertThat(response.lastAccessedAt()).isEqualTo(last);
+        assertThat(response.daysActive()).isEqualTo(1);
+        assertThat(response.averageClicksPerDay()).isEqualTo(7.0);
     }
 
     @Test

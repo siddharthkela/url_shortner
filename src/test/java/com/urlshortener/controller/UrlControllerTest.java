@@ -127,7 +127,7 @@ class UrlControllerTest {
 
     @Test
     void getAnalyticsReturns200WhenFound() throws Exception {
-        AnalyticsResponse response = new AnalyticsResponse("abc123", 5, Instant.now(), Instant.now());
+        AnalyticsResponse response = new AnalyticsResponse("abc123", 5, Instant.now(), Instant.now(), 3, 1.67);
         when(urlService.getAnalytics("abc123")).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/urls/abc123/analytics"))

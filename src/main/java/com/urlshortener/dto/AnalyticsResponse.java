@@ -6,6 +6,8 @@ public record AnalyticsResponse(
         String shortCode,
         long clickCount,
         Instant firstAccessedAt,
-        Instant lastAccessedAt
+        Instant lastAccessedAt,
+        long daysActive,
+        double averageClicksPerDay
 ) {
 }

@@ -4,6 +4,9 @@ import com.urlshortener.dto.AnalyticsResponse;
 import com.urlshortener.dto.UrlResponse;
 import com.urlshortener.entity.ShortUrlEntity;
 
+import java.time.Duration;
+import java.time.Instant;
+
 public final class UrlMapper {
 
     private UrlMapper() {
@@ -22,11 +25,15 @@ public final class UrlMapper {
     }
 
     public static AnalyticsResponse toAnalyticsResponse(ShortUrlEntity entity) {
+        long daysActive = Math.max(1, Duration.between(entity.getCreatedAt(), Instant.now()).toDays());
+        double averageClicksPerDay = entity.getClickCount() / (double) daysActive;
         return new AnalyticsResponse(
                 entity.getShortCode(),
                 entity.getClickCount(),
                 entity.getFirstAccessedAt(),
-                entity.getLastAccessedAt()
+                entity.getLastAccessedAt(),
+                daysActive,
+                averageClicksPerDay
         );
     }
 }
