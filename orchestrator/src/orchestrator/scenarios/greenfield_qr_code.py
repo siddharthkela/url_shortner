@@ -58,6 +58,7 @@ def build_dag(agent: Agent, repo_root: str) -> DAG:
         node_id="intake_requirement",
         agent=agent,
         payload_fn=lambda ctx: {"raw": RAW_REQUIREMENT},
+        decision_summary_fn=lambda out: f"Normalized: {out.get('normalized_requirement', '(n/a)')}",
     ))
 
     dag.add_node(build_codebase_analysis_node(
@@ -65,6 +66,7 @@ def build_dag(agent: Agent, repo_root: str) -> DAG:
         agent=agent,
         payload_fn=lambda ctx: {"repo_root": repo_root, "requirement": ctx.get_output("intake_requirement")},
         depends_on=["intake_requirement"],
+        decision_summary_fn=lambda out: f"Impacted: {out.get('impacted_files', [])}; new: {out.get('new_files', [])}",
     ))
 
     dag.add_node(build_design_node(
@@ -72,6 +74,7 @@ def build_dag(agent: Agent, repo_root: str) -> DAG:
         agent=agent,
         payload_fn=lambda ctx: {"impact": ctx.get_output("analyze_codebase")},
         depends_on=["analyze_codebase"],
+        decision_summary_fn=lambda out: f"Approach: {out.get('library', '(n/a)')}, endpoint {out.get('endpoint', '(n/a)')}",
     ))
 
     dag.add_node(build_implementation_node(
@@ -79,6 +82,7 @@ def build_dag(agent: Agent, repo_root: str) -> DAG:
         agent=agent,
         payload_fn=lambda ctx: {"design": ctx.get_output("design"), "repo_root": repo_root},
         depends_on=["design"],
+        decision_summary_fn=lambda out: f"Wrote: {out.get('files_written', [])}",
     ))
 
     dag.add_node(build_test_node(
@@ -86,6 +90,7 @@ def build_dag(agent: Agent, repo_root: str) -> DAG:
         agent=agent,
         payload_fn=lambda ctx: {"design": ctx.get_output("design"), "repo_root": repo_root},
         depends_on=["design"],
+        decision_summary_fn=lambda out: f"Wrote: {out.get('files_written', [])}",
     ))
 
     dag.add_node(build_docs_node(
@@ -93,6 +98,7 @@ def build_dag(agent: Agent, repo_root: str) -> DAG:
         agent=agent,
         payload_fn=lambda ctx: {"design": ctx.get_output("design"), "repo_root": repo_root},
         depends_on=["design"],
+        decision_summary_fn=lambda out: f"Wrote: {out.get('files_written', [])}",
     ))
 
     policy_engine = PolicyEngine.default()
@@ -130,6 +136,7 @@ def build_dag(agent: Agent, repo_root: str) -> DAG:
         payload_fn=lambda ctx: {"summary": "QR code endpoint ready for review"},
         depends_on=["run_tests", "update_docs"],
         requires_approval=True,
+        decision_summary_fn=lambda out: f"Release status: {out.get('status', '(n/a)')}",
     ))
 
     async def _finalize(node: Node, context) -> NodeResult:
