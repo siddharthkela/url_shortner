@@ -4,7 +4,10 @@ import com.urlshortener.dto.AnalyticsResponse;
 import com.urlshortener.dto.CreateUrlRequest;
 import com.urlshortener.dto.UpdateUrlRequest;
 import com.urlshortener.dto.UrlResponse;
+import com.urlshortener.exception.RateLimitExceededException;
+import com.urlshortener.service.RateLimiter;
 import com.urlshortener.service.UrlService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -15,14 +18,20 @@ import org.springframework.web.bind.annotation.*;
 public class UrlController {
 
     private final UrlService urlService;
+    private final RateLimiter rateLimiter;
 
-    public UrlController(UrlService urlService) {
+    public UrlController(UrlService urlService, RateLimiter rateLimiter) {
         this.urlService = urlService;
+        this.rateLimiter = rateLimiter;
     }
 
     @PostMapping("/api/v1/urls")
     public ResponseEntity<UrlResponse> createShortUrl(@Valid @RequestBody CreateUrlRequest request,
-                                                        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+                                                        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+                                                        HttpServletRequest httpRequest) {
+        if (!rateLimiter.tryAcquire(httpRequest.getRemoteAddr())) {
+            throw new RateLimitExceededException("Rate limit exceeded for URL creation. Try again later.");
+        }
         UrlResponse response = urlService.createShortUrl(request, idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

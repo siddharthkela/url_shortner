@@ -49,7 +49,7 @@ All endpoints are under `/api/v1/urls` except the redirect itself.
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/api/v1/urls` | Create a short URL. Optional `Idempotency-Key` header. |
+| `POST` | `/api/v1/urls` | Create a short URL. Optional `Idempotency-Key` header. Rate-limited per client IP. |
 | `GET` | `/{shortCode}` | Redirects (`302`) to the original URL. `404` if unknown, `410` if expired. |
 | `GET` | `/api/v1/urls/{shortCode}` | Fetch details. |
 | `GET` | `/api/v1/urls/{shortCode}/analytics` | Click count, first/last accessed timestamps. |
@@ -81,6 +81,10 @@ curl -s -X PUT http://localhost:8080/api/v1/urls/1 \
 curl -s -X DELETE http://localhost:8080/api/v1/urls/1 \
   -H 'X-Owner-Token: <ownerToken>'
 ```
+
+### Rate limiting
+
+`POST /api/v1/urls` is rate-limited per client IP (`app.rate-limit.requests-per-minute`, default 30/minute). Exceeding it returns `429 Too Many Requests`. Disable entirely with `app.rate-limit.enabled: false`.
 
 ### Custom alias
 

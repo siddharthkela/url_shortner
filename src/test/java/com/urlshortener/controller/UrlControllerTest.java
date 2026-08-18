@@ -7,7 +7,9 @@ import com.urlshortener.exception.TooManyActiveUrlsException;
 import com.urlshortener.exception.UnauthorizedOwnerException;
 import com.urlshortener.exception.UrlExpiredException;
 import com.urlshortener.exception.UrlNotFoundException;
+import com.urlshortener.service.RateLimiter;
 import com.urlshortener.service.UrlService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -31,6 +33,14 @@ class UrlControllerTest {
 
     @MockBean
     private UrlService urlService;
+
+    @MockBean
+    private RateLimiter rateLimiter;
+
+    @BeforeEach
+    void setUpRateLimiter() {
+        when(rateLimiter.tryAcquire(any())).thenReturn(true);
+    }
 
     @Test
     void createReturns201OnValidRequest() throws Exception {
@@ -203,5 +213,15 @@ class UrlControllerTest {
 
         mockMvc.perform(delete("/api/v1/urls/missing").header("X-Owner-Token", "owner-token"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void createReturns429WhenRateLimited() throws Exception {
+        when(rateLimiter.tryAcquire(any())).thenReturn(false);
+
+        mockMvc.perform(post("/api/v1/urls")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\": \"https://example.com\"}"))
+                .andExpect(status().isTooManyRequests());
     }
 }
