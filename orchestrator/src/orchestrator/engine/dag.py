@@ -230,12 +230,16 @@ class Scheduler:
             self.event_sink.emit("node_blocked", node_id=node.id, reason=entry.reason or "entry gate failed")
             return
 
-        if node.requires_approval:
-            approved = await self.approval_manager(node, context)
-            if not approved:
-                node.status = NodeStatus.BLOCKED
-                self.event_sink.emit("node_blocked", node_id=node.id, reason="approval denied")
-                return
+        # Always consult the approval manager rather than gating on
+        # node.requires_approval here — the manager itself decides whether a
+        # pause is actually needed (e.g. an autonomy level of DRY_RUN pauses
+        # on every node, not just ones individually flagged), so the default
+        # no-op manager can stay a fast unconditional pass-through.
+        approved = await self.approval_manager(node, context)
+        if not approved:
+            node.status = NodeStatus.BLOCKED
+            self.event_sink.emit("node_blocked", node_id=node.id, reason="approval denied")
+            return
 
         node.status = NodeStatus.RUNNING
         self.event_sink.emit("node_started", node_id=node.id)
