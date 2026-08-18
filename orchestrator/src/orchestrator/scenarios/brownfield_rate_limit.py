@@ -22,7 +22,7 @@ from orchestrator.engine.approval import ApprovalManager, AutonomyLevel, auto_ap
 from orchestrator.engine.context import ExecutionContext
 from orchestrator.engine.dag import DAG, Node, NodeResult, RunResult, Scheduler
 from orchestrator.engine.policy import PolicyContext, PolicyEngine
-from orchestrator.engine.reliability import RetryPolicy
+from orchestrator.engine.reliability import RetryPolicy, make_retrying_executor
 from orchestrator.observability.dashboard import write_dashboard
 from orchestrator.observability.event_log import JsonlEventSink
 from orchestrator.observability.metrics import compute_metrics
@@ -188,7 +188,7 @@ async def run(repo_root: str, auto_approve_all: bool = True) -> RunResult:
         event_sink=sink,
     )
     context = ExecutionContext(run_id="brownfield-rate-limit")
-    scheduler = Scheduler(event_sink=sink, approval_manager=approval)
+    scheduler = Scheduler(event_sink=sink, approval_manager=approval, retry_executor=make_retrying_executor(event_sink=sink))
 
     result = await scheduler.run(dag, context)
 
