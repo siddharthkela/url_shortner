@@ -53,6 +53,7 @@ All endpoints are under `/api/v1/urls` except the redirect itself.
 | `GET` | `/{shortCode}` | Redirects (`302`) to the original URL. `404` if unknown, `410` if expired. |
 | `GET` | `/api/v1/urls/{shortCode}` | Fetch details. |
 | `GET` | `/api/v1/urls/{shortCode}/analytics` | Click count, first/last accessed timestamps. |
+| `GET` | `/api/v1/urls/{shortCode}/qrcode` | PNG QR code encoding the short URL. |
 | `PUT` | `/api/v1/urls/{shortCode}` | Update target URL / expiration. Requires `X-Owner-Token` header. |
 | `DELETE` | `/api/v1/urls/{shortCode}` | Soft delete. Requires `X-Owner-Token` header. |
 
@@ -80,6 +81,12 @@ curl -s -X PUT http://localhost:8080/api/v1/urls/1 \
 # Delete (soft delete)
 curl -s -X DELETE http://localhost:8080/api/v1/urls/1 \
   -H 'X-Owner-Token: <ownerToken>'
+```
+
+### QR code
+
+```bash
+curl -s http://localhost:8080/api/v1/urls/1/qrcode --output qrcode.png
 ```
 
 ### Custom alias

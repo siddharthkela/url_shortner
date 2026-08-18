@@ -7,6 +7,7 @@ import com.urlshortener.exception.TooManyActiveUrlsException;
 import com.urlshortener.exception.UnauthorizedOwnerException;
 import com.urlshortener.exception.UrlExpiredException;
 import com.urlshortener.exception.UrlNotFoundException;
+import com.urlshortener.service.QrCodeService;
 import com.urlshortener.service.UrlService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,9 @@ class UrlControllerTest {
 
     @MockBean
     private UrlService urlService;
+
+    @MockBean
+    private QrCodeService qrCodeService;
 
     @Test
     void createReturns201OnValidRequest() throws Exception {
@@ -203,5 +207,34 @@ class UrlControllerTest {
 
         mockMvc.perform(delete("/api/v1/urls/missing").header("X-Owner-Token", "owner-token"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getQrCodeReturns200WithPngContentType() throws Exception {
+        UrlResponse response = new UrlResponse("abc123", "http://localhost:8080/abc123",
+                "https://example.com", "owner-token", Instant.now(), null, true);
+        when(urlService.getDetails("abc123")).thenReturn(response);
+        byte[] fakePng = new byte[]{(byte) 0x89, 'P', 'N', 'G'};
+        when(qrCodeService.generatePng("http://localhost:8080/abc123")).thenReturn(fakePng);
+
+        mockMvc.perform(get("/api/v1/urls/abc123/qrcode"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.IMAGE_PNG));
+    }
+
+    @Test
+    void getQrCodeReturns404WhenShortCodeNotFound() throws Exception {
+        when(urlService.getDetails("missing")).thenThrow(new UrlNotFoundException("not found"));
+
+        mockMvc.perform(get("/api/v1/urls/missing/qrcode"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getQrCodeReturns410WhenExpired() throws Exception {
+        when(urlService.getDetails("expired")).thenThrow(new UrlExpiredException("expired"));
+
+        mockMvc.perform(get("/api/v1/urls/expired/qrcode"))
+                .andExpect(status().isGone());
     }
 }
