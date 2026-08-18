@@ -1,31 +1,41 @@
 package com.urlshortener.service;
 
+import com.urlshortener.entity.ShortUrlEntity;
+import com.urlshortener.repository.ShortUrlRepository;
 import com.urlshortener.util.Base62Encoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Map;
+import java.time.Instant;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.UUID;
 
-/**
- * Phase 1: in-memory storage only, to prove the create/redirect flow end to end.
- * Replaced with JPA-backed persistence in Phase 2.
- */
 @Service
 public class UrlService {
 
-    private final Map<String, String> shortCodeToUrl = new ConcurrentHashMap<>();
-    private final AtomicLong idSequence = new AtomicLong(1);
+    private final ShortUrlRepository repository;
 
+    public UrlService(ShortUrlRepository repository) {
+        this.repository = repository;
+    }
+
+    /**
+     * The short code is derived from the DB-assigned ID (Base62), so the entity is
+     * saved once with a placeholder short_code to obtain the generated ID, then
+     * updated with the real code. Both writes happen in the same transaction.
+     */
+    @Transactional
     public String createShortUrl(String originalUrl) {
-        long id = idSequence.getAndIncrement();
-        String shortCode = Base62Encoder.encode(id);
-        shortCodeToUrl.put(shortCode, originalUrl);
-        return shortCode;
+        UUID ownerToken = UUID.randomUUID();
+        String placeholder = UUID.randomUUID().toString().substring(0, 16);
+        ShortUrlEntity entity = new ShortUrlEntity(placeholder, originalUrl, false, ownerToken, Instant.now(), null);
+        entity = repository.save(entity);
+        entity.setShortCode(Base62Encoder.encode(entity.getId()));
+        repository.save(entity);
+        return entity.getShortCode();
     }
 
     public Optional<String> resolve(String shortCode) {
-        return Optional.ofNullable(shortCodeToUrl.get(shortCode));
+        return repository.findByShortCode(shortCode).map(ShortUrlEntity::getOriginalUrl);
     }
 }
