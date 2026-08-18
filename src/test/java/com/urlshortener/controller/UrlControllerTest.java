@@ -4,6 +4,8 @@ import com.urlshortener.dto.AnalyticsResponse;
 import com.urlshortener.dto.UrlResponse;
 import com.urlshortener.exception.AliasAlreadyExistsException;
 import com.urlshortener.exception.TooManyActiveUrlsException;
+import com.urlshortener.exception.UnauthorizedOwnerException;
+import com.urlshortener.exception.UrlExpiredException;
 import com.urlshortener.exception.UrlNotFoundException;
 import com.urlshortener.service.UrlService;
 import org.junit.jupiter.api.Test;
@@ -16,6 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.Instant;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -96,6 +99,14 @@ class UrlControllerTest {
     }
 
     @Test
+    void redirectReturns410WhenExpired() throws Exception {
+        when(urlService.resolve("expired")).thenThrow(new UrlExpiredException("expired"));
+
+        mockMvc.perform(get("/expired"))
+                .andExpect(status().isGone());
+    }
+
+    @Test
     void getDetailsReturns200WhenFound() throws Exception {
         UrlResponse response = new UrlResponse("abc123", "http://localhost:8080/abc123",
                 "https://example.com", "owner-token", Instant.now(), null, true);
@@ -129,6 +140,68 @@ class UrlControllerTest {
         when(urlService.getAnalytics("missing")).thenThrow(new UrlNotFoundException("not found"));
 
         mockMvc.perform(get("/api/v1/urls/missing/analytics"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void updateReturns200OnSuccess() throws Exception {
+        UrlResponse response = new UrlResponse("abc123", "http://localhost:8080/abc123",
+                "https://updated.example.com", "owner-token", Instant.now(), null, true);
+        when(urlService.updateUrl(eq("abc123"), eq("owner-token"), any())).thenReturn(response);
+
+        mockMvc.perform(put("/api/v1/urls/abc123")
+                        .header("X-Owner-Token", "owner-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\": \"https://updated.example.com\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.originalUrl").value("https://updated.example.com"));
+    }
+
+    @Test
+    void updateReturns403WhenOwnerMismatch() throws Exception {
+        when(urlService.updateUrl(eq("abc123"), any(), any()))
+                .thenThrow(new UnauthorizedOwnerException("mismatch"));
+
+        mockMvc.perform(put("/api/v1/urls/abc123")
+                        .header("X-Owner-Token", "wrong-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\": \"https://updated.example.com\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void updateReturns404WhenNotFound() throws Exception {
+        when(urlService.updateUrl(eq("missing"), any(), any()))
+                .thenThrow(new UrlNotFoundException("not found"));
+
+        mockMvc.perform(put("/api/v1/urls/missing")
+                        .header("X-Owner-Token", "owner-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"originalUrl\": \"https://updated.example.com\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deleteReturns204OnSuccess() throws Exception {
+        mockMvc.perform(delete("/api/v1/urls/abc123").header("X-Owner-Token", "owner-token"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void deleteReturns403WhenOwnerMismatch() throws Exception {
+        org.mockito.Mockito.doThrow(new UnauthorizedOwnerException("mismatch"))
+                .when(urlService).deleteUrl(eq("abc123"), any());
+
+        mockMvc.perform(delete("/api/v1/urls/abc123").header("X-Owner-Token", "wrong-token"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void deleteReturns404WhenNotFound() throws Exception {
+        org.mockito.Mockito.doThrow(new UrlNotFoundException("not found"))
+                .when(urlService).deleteUrl(eq("missing"), any());
+
+        mockMvc.perform(delete("/api/v1/urls/missing").header("X-Owner-Token", "owner-token"))
                 .andExpect(status().isNotFound());
     }
 }

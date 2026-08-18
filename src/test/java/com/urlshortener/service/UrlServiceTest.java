@@ -1,11 +1,14 @@
 package com.urlshortener.service;
 
 import com.urlshortener.dto.CreateUrlRequest;
+import com.urlshortener.dto.UpdateUrlRequest;
 import com.urlshortener.dto.UrlResponse;
 import com.urlshortener.entity.ShortUrlEntity;
 import com.urlshortener.exception.AliasAlreadyExistsException;
 import com.urlshortener.exception.InvalidUrlException;
 import com.urlshortener.exception.TooManyActiveUrlsException;
+import com.urlshortener.exception.UnauthorizedOwnerException;
+import com.urlshortener.exception.UrlExpiredException;
 import com.urlshortener.exception.UrlNotFoundException;
 import com.urlshortener.repository.ShortUrlRepository;
 import com.urlshortener.util.Base62Encoder;
@@ -39,8 +42,12 @@ class UrlServiceTest {
     }
 
     private ShortUrlEntity entityWithId(long id, String shortCode, boolean customAlias) {
+        return entityWithId(id, shortCode, customAlias, UUID.randomUUID(), null);
+    }
+
+    private ShortUrlEntity entityWithId(long id, String shortCode, boolean customAlias, UUID ownerToken, Instant expiresAt) {
         ShortUrlEntity entity = new ShortUrlEntity(shortCode, "https://example.com", customAlias,
-                UUID.randomUUID(), Instant.now(), null);
+                ownerToken, Instant.now(), expiresAt);
         setId(entity, id);
         return entity;
     }
@@ -194,5 +201,113 @@ class UrlServiceTest {
         when(repository.findByShortCode("missing")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> urlService.getAnalytics("missing")).isInstanceOf(UrlNotFoundException.class);
+    }
+
+    @Test
+    void resolveThrowsUrlExpiredWhenPastExpiry() {
+        Instant past = Instant.now().minusSeconds(60);
+        ShortUrlEntity entity = entityWithId(1L, "abc", false, UUID.randomUUID(), past);
+        when(repository.findByShortCode("abc")).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> urlService.resolve("abc")).isInstanceOf(UrlExpiredException.class);
+    }
+
+    @Test
+    void getDetailsThrowsUrlExpiredWhenPastExpiry() {
+        Instant past = Instant.now().minusSeconds(60);
+        ShortUrlEntity entity = entityWithId(1L, "abc", false, UUID.randomUUID(), past);
+        when(repository.findByShortCode("abc")).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> urlService.getDetails("abc")).isInstanceOf(UrlExpiredException.class);
+    }
+
+    @Test
+    void updateUrlChangesOriginalUrlAndExpiresAtWhenOwnerMatches() {
+        UUID ownerToken = UUID.randomUUID();
+        ShortUrlEntity entity = entityWithId(1L, "abc", false, ownerToken, null);
+        when(repository.findByShortCode("abc")).thenReturn(Optional.of(entity));
+        when(repository.save(any(ShortUrlEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Instant newExpiry = Instant.now().plusSeconds(3600);
+        UrlResponse response = urlService.updateUrl("abc", ownerToken.toString(),
+                new UpdateUrlRequest("https://updated.example.com", newExpiry));
+
+        assertThat(response.originalUrl()).isEqualTo("https://updated.example.com");
+        assertThat(response.expiresAt()).isEqualTo(newExpiry);
+    }
+
+    @Test
+    void updateUrlAllowsExtendingAnAlreadyExpiredUrl() {
+        UUID ownerToken = UUID.randomUUID();
+        Instant past = Instant.now().minusSeconds(60);
+        ShortUrlEntity entity = entityWithId(1L, "abc", false, ownerToken, past);
+        when(repository.findByShortCode("abc")).thenReturn(Optional.of(entity));
+        when(repository.save(any(ShortUrlEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Instant newExpiry = Instant.now().plusSeconds(3600);
+        UrlResponse response = urlService.updateUrl("abc", ownerToken.toString(),
+                new UpdateUrlRequest(null, newExpiry));
+
+        assertThat(response.expiresAt()).isEqualTo(newExpiry);
+    }
+
+    @Test
+    void updateUrlThrowsUnauthorizedOwnerWhenTokenMismatch() {
+        ShortUrlEntity entity = entityWithId(1L, "abc", false, UUID.randomUUID(), null);
+        when(repository.findByShortCode("abc")).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> urlService.updateUrl("abc", UUID.randomUUID().toString(),
+                new UpdateUrlRequest("https://other.example.com", null)))
+                .isInstanceOf(UnauthorizedOwnerException.class);
+    }
+
+    @Test
+    void updateUrlThrowsUnauthorizedOwnerWhenTokenMissing() {
+        ShortUrlEntity entity = entityWithId(1L, "abc", false, UUID.randomUUID(), null);
+        when(repository.findByShortCode("abc")).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> urlService.updateUrl("abc", null,
+                new UpdateUrlRequest("https://other.example.com", null)))
+                .isInstanceOf(UnauthorizedOwnerException.class);
+    }
+
+    @Test
+    void updateUrlThrowsUrlNotFoundWhenMissing() {
+        when(repository.findByShortCode("missing")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> urlService.updateUrl("missing", UUID.randomUUID().toString(),
+                new UpdateUrlRequest("https://example.com", null)))
+                .isInstanceOf(UrlNotFoundException.class);
+    }
+
+    @Test
+    void deleteUrlSetsInactiveWhenOwnerMatches() {
+        UUID ownerToken = UUID.randomUUID();
+        ShortUrlEntity entity = entityWithId(1L, "abc", false, ownerToken, null);
+        when(repository.findByShortCode("abc")).thenReturn(Optional.of(entity));
+        when(repository.save(any(ShortUrlEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        urlService.deleteUrl("abc", ownerToken.toString());
+
+        assertThat(entity.isActive()).isFalse();
+        verify(repository).save(entity);
+    }
+
+    @Test
+    void deleteUrlThrowsUnauthorizedOwnerWhenTokenMismatch() {
+        ShortUrlEntity entity = entityWithId(1L, "abc", false, UUID.randomUUID(), null);
+        when(repository.findByShortCode("abc")).thenReturn(Optional.of(entity));
+
+        assertThatThrownBy(() -> urlService.deleteUrl("abc", UUID.randomUUID().toString()))
+                .isInstanceOf(UnauthorizedOwnerException.class);
+        assertThat(entity.isActive()).isTrue();
+    }
+
+    @Test
+    void deleteUrlThrowsUrlNotFoundWhenMissing() {
+        when(repository.findByShortCode("missing")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> urlService.deleteUrl("missing", UUID.randomUUID().toString()))
+                .isInstanceOf(UrlNotFoundException.class);
     }
 }

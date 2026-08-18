@@ -2,6 +2,7 @@ package com.urlshortener.controller;
 
 import com.urlshortener.dto.AnalyticsResponse;
 import com.urlshortener.dto.CreateUrlRequest;
+import com.urlshortener.dto.UpdateUrlRequest;
 import com.urlshortener.dto.UrlResponse;
 import com.urlshortener.service.UrlService;
 import jakarta.validation.Valid;
@@ -41,5 +42,19 @@ public class UrlController {
     @GetMapping("/api/v1/urls/{shortCode}/analytics")
     public ResponseEntity<AnalyticsResponse> getAnalytics(@PathVariable String shortCode) {
         return ResponseEntity.ok(urlService.getAnalytics(shortCode));
+    }
+
+    @PutMapping("/api/v1/urls/{shortCode}")
+    public ResponseEntity<UrlResponse> updateUrl(@PathVariable String shortCode,
+                                                  @RequestHeader(value = "X-Owner-Token", required = false) String ownerToken,
+                                                  @Valid @RequestBody UpdateUrlRequest request) {
+        return ResponseEntity.ok(urlService.updateUrl(shortCode, ownerToken, request));
+    }
+
+    @DeleteMapping("/api/v1/urls/{shortCode}")
+    public ResponseEntity<Void> deleteUrl(@PathVariable String shortCode,
+                                          @RequestHeader(value = "X-Owner-Token", required = false) String ownerToken) {
+        urlService.deleteUrl(shortCode, ownerToken);
+        return ResponseEntity.noContent().build();
     }
 }

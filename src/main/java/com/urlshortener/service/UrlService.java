@@ -2,11 +2,14 @@ package com.urlshortener.service;
 
 import com.urlshortener.dto.AnalyticsResponse;
 import com.urlshortener.dto.CreateUrlRequest;
+import com.urlshortener.dto.UpdateUrlRequest;
 import com.urlshortener.dto.UrlResponse;
 import com.urlshortener.entity.ShortUrlEntity;
 import com.urlshortener.exception.AliasAlreadyExistsException;
 import com.urlshortener.exception.InvalidUrlException;
 import com.urlshortener.exception.TooManyActiveUrlsException;
+import com.urlshortener.exception.UnauthorizedOwnerException;
+import com.urlshortener.exception.UrlExpiredException;
 import com.urlshortener.exception.UrlNotFoundException;
 import com.urlshortener.mapper.UrlMapper;
 import com.urlshortener.repository.ShortUrlRepository;
@@ -84,10 +87,66 @@ public class UrlService {
         return UrlMapper.toAnalyticsResponse(entity);
     }
 
+    @Transactional
+    public UrlResponse updateUrl(String shortCode, String ownerTokenHeader, UpdateUrlRequest request) {
+        ShortUrlEntity entity = findOwnedActiveOrThrow(shortCode, ownerTokenHeader);
+
+        if (request.originalUrl() != null && !request.originalUrl().isBlank()) {
+            validateOriginalUrl(request.originalUrl());
+            entity.setOriginalUrl(request.originalUrl());
+        }
+        if (request.expiresAt() != null) {
+            validateExpiresAt(request.expiresAt());
+            entity.setExpiresAt(request.expiresAt());
+        }
+
+        entity = repository.save(entity);
+        return UrlMapper.toResponse(entity, baseUrl);
+    }
+
+    @Transactional
+    public void deleteUrl(String shortCode, String ownerTokenHeader) {
+        ShortUrlEntity entity = findOwnedActiveOrThrow(shortCode, ownerTokenHeader);
+        entity.setActive(false);
+        repository.save(entity);
+    }
+
+    /**
+     * Read-path lookup (redirect, details, analytics): active row required, and
+     * a past expiresAt yields 410 Gone rather than 404 Not Found, per Section 1.
+     */
     private ShortUrlEntity findActiveOrThrow(String shortCode) {
-        return repository.findByShortCode(shortCode)
+        ShortUrlEntity entity = repository.findByShortCode(shortCode)
                 .filter(ShortUrlEntity::isActive)
                 .orElseThrow(() -> new UrlNotFoundException("Short code not found: " + shortCode));
+        if (entity.getExpiresAt() != null && entity.getExpiresAt().isBefore(Instant.now())) {
+            throw new UrlExpiredException("Short code has expired: " + shortCode);
+        }
+        return entity;
+    }
+
+    /**
+     * Owner-mutation lookup (update, delete): no expiry check — an owner must be able
+     * to extend or delete an already-expired URL. Not-found and wrong-owner both map
+     * to distinct status codes (404 / 403) per Section 7.
+     */
+    private ShortUrlEntity findOwnedActiveOrThrow(String shortCode, String ownerTokenHeader) {
+        ShortUrlEntity entity = repository.findByShortCode(shortCode)
+                .filter(ShortUrlEntity::isActive)
+                .orElseThrow(() -> new UrlNotFoundException("Short code not found: " + shortCode));
+        UUID ownerToken = parseOwnerToken(ownerTokenHeader);
+        if (!entity.getOwnerToken().equals(ownerToken)) {
+            throw new UnauthorizedOwnerException("Owner token does not match");
+        }
+        return entity;
+    }
+
+    private UUID parseOwnerToken(String ownerTokenHeader) {
+        try {
+            return UUID.fromString(ownerTokenHeader);
+        } catch (Exception e) {
+            throw new UnauthorizedOwnerException("Missing or invalid owner token");
+        }
     }
 
     private void validateOriginalUrl(String url) {
