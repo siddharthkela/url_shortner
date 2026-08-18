@@ -166,11 +166,13 @@ class Scheduler:
         retry_executor: Callable[[Node, ExecutionContext], Awaitable[NodeResult]] = _default_retry_executor,
         approval_manager: Callable[[Node, ExecutionContext], Awaitable[bool]] = _default_approval_manager,
         event_sink: Optional[EventSink] = None,
+        circuit_breaker: Optional[Any] = None,
     ) -> None:
         self.gate_evaluator = gate_evaluator
         self.retry_executor = retry_executor
         self.approval_manager = approval_manager
         self.event_sink = event_sink or EventSink()
+        self.circuit_breaker = circuit_breaker
 
     async def run(self, dag: DAG, context: ExecutionContext) -> RunResult:
         dag.validate()
@@ -179,6 +181,9 @@ class Scheduler:
         )
 
         while True:
+            if self.circuit_breaker is not None and self.circuit_breaker.should_trip():
+                self._safe_stop(dag)
+                break
             ready = self._ready_nodes(dag)
             if not ready:
                 self._propagate_blocked(dag)
@@ -187,6 +192,13 @@ class Scheduler:
             await asyncio.gather(*(self._execute_node(node, dag, context) for node in ready))
 
         return RunResult(context=context, dag=dag)
+
+    def _safe_stop(self, dag: DAG) -> None:
+        for node in dag.nodes.values():
+            if node.status == NodeStatus.PENDING:
+                node.status = NodeStatus.BLOCKED
+                self.event_sink.emit("node_blocked", node_id=node.id, reason="safe-stop: circuit breaker tripped")
+        self.event_sink.emit("safe_stop_triggered")
 
     def _ready_nodes(self, dag: DAG) -> List[Node]:
         ready = []
@@ -237,15 +249,22 @@ class Scheduler:
                 node.status = NodeStatus.SUCCEEDED
                 context.set_output(node.id, result.output)
                 self.event_sink.emit("node_succeeded", node_id=node.id, used_fallback=result.used_fallback)
+                self._record_circuit_breaker(True)
             else:
                 node.status = NodeStatus.FAILED
                 node.result = NodeResult(success=False, error=exit_gate.reason or "exit gate failed")
                 self.event_sink.emit("node_failed", node_id=node.id, reason=exit_gate.reason)
                 self._maybe_rollback(node, context)
+                self._record_circuit_breaker(False)
         else:
             node.status = NodeStatus.FAILED
             self.event_sink.emit("node_failed", node_id=node.id, reason=result.error)
             self._maybe_rollback(node, context)
+            self._record_circuit_breaker(False)
+
+    def _record_circuit_breaker(self, success: bool) -> None:
+        if self.circuit_breaker is not None:
+            self.circuit_breaker.record_result(success)
 
     def _maybe_rollback(self, node: Node, context: ExecutionContext) -> None:
         if node.rollback is not None:
