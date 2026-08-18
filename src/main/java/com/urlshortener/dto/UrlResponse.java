@@ -1,4 +1,14 @@
 package com.urlshortener.dto;
 
-public record UrlResponse(String shortCode, String shortUrl, String originalUrl) {
+import java.time.Instant;
+
+public record UrlResponse(
+        String shortCode,
+        String shortUrl,
+        String originalUrl,
+        String ownerToken,
+        Instant createdAt,
+        Instant expiresAt,
+        boolean active
+) {
 }
