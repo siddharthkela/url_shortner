@@ -127,6 +127,17 @@ class UrlServiceTest {
     }
 
     @Test
+    void resolveIncrementsClickCountViaAtomicUpdateNotReadModifyWrite() {
+        ShortUrlEntity entity = entityWithId(1L, "abc", false);
+        when(repository.findByShortCode("abc")).thenReturn(Optional.of(entity));
+
+        urlService.resolve("abc");
+
+        verify(repository, times(1)).incrementClickCount(eq("abc"), any(Instant.class));
+        verify(repository, never()).save(any(ShortUrlEntity.class));
+    }
+
+    @Test
     void resolveThrowsUrlNotFoundWhenMissing() {
         when(repository.findByShortCode("missing")).thenReturn(Optional.empty());
 
@@ -158,5 +169,30 @@ class UrlServiceTest {
         when(repository.findByShortCode("missing")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> urlService.getDetails("missing")).isInstanceOf(UrlNotFoundException.class);
+    }
+
+    @Test
+    void getAnalyticsReturnsClickCountAndTimestamps() {
+        ShortUrlEntity entity = entityWithId(1L, "abc", false);
+        entity.setClickCount(7);
+        Instant first = Instant.now().minusSeconds(60);
+        Instant last = Instant.now();
+        entity.setFirstAccessedAt(first);
+        entity.setLastAccessedAt(last);
+        when(repository.findByShortCode("abc")).thenReturn(Optional.of(entity));
+
+        var response = urlService.getAnalytics("abc");
+
+        assertThat(response.shortCode()).isEqualTo("abc");
+        assertThat(response.clickCount()).isEqualTo(7);
+        assertThat(response.firstAccessedAt()).isEqualTo(first);
+        assertThat(response.lastAccessedAt()).isEqualTo(last);
+    }
+
+    @Test
+    void getAnalyticsThrowsUrlNotFoundWhenMissing() {
+        when(repository.findByShortCode("missing")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> urlService.getAnalytics("missing")).isInstanceOf(UrlNotFoundException.class);
     }
 }

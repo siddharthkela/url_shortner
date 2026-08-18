@@ -1,5 +1,6 @@
 package com.urlshortener.controller;
 
+import com.urlshortener.dto.AnalyticsResponse;
 import com.urlshortener.dto.UrlResponse;
 import com.urlshortener.exception.AliasAlreadyExistsException;
 import com.urlshortener.exception.TooManyActiveUrlsException;
@@ -110,6 +111,24 @@ class UrlControllerTest {
         when(urlService.getDetails("missing")).thenThrow(new UrlNotFoundException("not found"));
 
         mockMvc.perform(get("/api/v1/urls/missing"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getAnalyticsReturns200WhenFound() throws Exception {
+        AnalyticsResponse response = new AnalyticsResponse("abc123", 5, Instant.now(), Instant.now());
+        when(urlService.getAnalytics("abc123")).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/urls/abc123/analytics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.clickCount").value(5));
+    }
+
+    @Test
+    void getAnalyticsReturns404WhenNotFound() throws Exception {
+        when(urlService.getAnalytics("missing")).thenThrow(new UrlNotFoundException("not found"));
+
+        mockMvc.perform(get("/api/v1/urls/missing/analytics"))
                 .andExpect(status().isNotFound());
     }
 }

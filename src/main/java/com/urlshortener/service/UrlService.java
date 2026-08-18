@@ -1,5 +1,6 @@
 package com.urlshortener.service;
 
+import com.urlshortener.dto.AnalyticsResponse;
 import com.urlshortener.dto.CreateUrlRequest;
 import com.urlshortener.dto.UrlResponse;
 import com.urlshortener.entity.ShortUrlEntity;
@@ -71,8 +72,16 @@ public class UrlService {
         return UrlMapper.toResponse(entity, baseUrl);
     }
 
+    @Transactional
     public String resolve(String shortCode) {
-        return findActiveOrThrow(shortCode).getOriginalUrl();
+        ShortUrlEntity entity = findActiveOrThrow(shortCode);
+        repository.incrementClickCount(shortCode, Instant.now());
+        return entity.getOriginalUrl();
+    }
+
+    public AnalyticsResponse getAnalytics(String shortCode) {
+        ShortUrlEntity entity = findActiveOrThrow(shortCode);
+        return UrlMapper.toAnalyticsResponse(entity);
     }
 
     private ShortUrlEntity findActiveOrThrow(String shortCode) {

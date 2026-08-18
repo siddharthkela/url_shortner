@@ -1,5 +1,6 @@
 package com.urlshortener.controller;
 
+import com.urlshortener.dto.AnalyticsResponse;
 import com.urlshortener.dto.CreateUrlRequest;
 import com.urlshortener.dto.UrlResponse;
 import com.urlshortener.service.UrlService;
@@ -35,5 +36,10 @@ public class UrlController {
     @GetMapping("/api/v1/urls/{shortCode}")
     public ResponseEntity<UrlResponse> getDetails(@PathVariable String shortCode) {
         return ResponseEntity.ok(urlService.getDetails(shortCode));
+    }
+
+    @GetMapping("/api/v1/urls/{shortCode}/analytics")
+    public ResponseEntity<AnalyticsResponse> getAnalytics(@PathVariable String shortCode) {
+        return ResponseEntity.ok(urlService.getAnalytics(shortCode));
     }
 }

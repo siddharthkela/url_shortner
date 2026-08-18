@@ -1,5 +1,6 @@
 package com.urlshortener.mapper;
 
+import com.urlshortener.dto.AnalyticsResponse;
 import com.urlshortener.dto.UrlResponse;
 import com.urlshortener.entity.ShortUrlEntity;
 
@@ -17,6 +18,15 @@ public final class UrlMapper {
                 entity.getCreatedAt(),
                 entity.getExpiresAt(),
                 entity.isActive()
+        );
+    }
+
+    public static AnalyticsResponse toAnalyticsResponse(ShortUrlEntity entity) {
+        return new AnalyticsResponse(
+                entity.getShortCode(),
+                entity.getClickCount(),
+                entity.getFirstAccessedAt(),
+                entity.getLastAccessedAt()
         );
     }
 }
