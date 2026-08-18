@@ -21,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class UrlService {
@@ -29,6 +31,12 @@ public class UrlService {
     private final ShortUrlRepository repository;
     private final long maxActiveUrls;
     private final String baseUrl;
+
+    /**
+     * In-memory idempotency store: no separate TTL/eviction, since the whole
+     * dataset is already ephemeral (JVM-lifetime only) per the plan's design.
+     */
+    private final Map<String, UrlResponse> idempotencyCache = new ConcurrentHashMap<>();
 
     public UrlService(ShortUrlRepository repository,
                        @Value("${app.max-active-urls}") long maxActiveUrls,
@@ -38,8 +46,34 @@ public class UrlService {
         this.baseUrl = baseUrl;
     }
 
+    /**
+     * Test-convenience overload only (package-private): self-invocation bypasses the
+     * Spring proxy, so callers that need the @Transactional guarantee must call the
+     * two-arg overload directly, as the controller does.
+     */
+    UrlResponse createShortUrl(CreateUrlRequest request) {
+        return createShortUrl(request, null);
+    }
+
     @Transactional
-    public UrlResponse createShortUrl(CreateUrlRequest request) {
+    public UrlResponse createShortUrl(CreateUrlRequest request, String idempotencyKey) {
+        boolean hasIdempotencyKey = idempotencyKey != null && !idempotencyKey.isBlank();
+        if (hasIdempotencyKey) {
+            UrlResponse cached = idempotencyCache.get(idempotencyKey);
+            if (cached != null) {
+                return cached;
+            }
+        }
+
+        UrlResponse response = persistShortUrl(request);
+
+        if (hasIdempotencyKey) {
+            idempotencyCache.put(idempotencyKey, response);
+        }
+        return response;
+    }
+
+    private UrlResponse persistShortUrl(CreateUrlRequest request) {
         validateOriginalUrl(request.originalUrl());
         validateExpiresAt(request.expiresAt());
 

@@ -76,6 +76,37 @@ class UrlServiceTest {
     }
 
     @Test
+    void retryWithSameIdempotencyKeyReturnsCachedResponseWithoutCreatingDuplicateRow() {
+        when(repository.countByActiveTrue()).thenReturn(0L);
+        ShortUrlEntity saved = entityWithId(42L, "placeholder", false);
+        when(repository.save(any(ShortUrlEntity.class))).thenReturn(saved);
+
+        CreateUrlRequest request = new CreateUrlRequest("https://example.com/page", null, null);
+        UrlResponse first = urlService.createShortUrl(request, "idem-key-1");
+        UrlResponse second = urlService.createShortUrl(request, "idem-key-1");
+
+        assertThat(second).isEqualTo(first);
+        verify(repository, times(2)).save(any(ShortUrlEntity.class));
+    }
+
+    @Test
+    void differentIdempotencyKeysCreateDistinctRows() {
+        when(repository.countByActiveTrue()).thenReturn(0L);
+        when(repository.save(any(ShortUrlEntity.class)))
+                .thenReturn(entityWithId(1L, "placeholder", false))
+                .thenReturn(entityWithId(1L, "a", false))
+                .thenReturn(entityWithId(2L, "placeholder", false))
+                .thenReturn(entityWithId(2L, "b", false));
+
+        CreateUrlRequest request = new CreateUrlRequest("https://example.com/page", null, null);
+        UrlResponse first = urlService.createShortUrl(request, "idem-key-1");
+        UrlResponse second = urlService.createShortUrl(request, "idem-key-2");
+
+        assertThat(first.shortCode()).isNotEqualTo(second.shortCode());
+        verify(repository, times(4)).save(any(ShortUrlEntity.class));
+    }
+
+    @Test
     void usesCustomAliasWhenProvidedAndAvailable() {
         when(repository.countByActiveTrue()).thenReturn(0L);
         when(repository.existsByShortCode("myalias")).thenReturn(false);

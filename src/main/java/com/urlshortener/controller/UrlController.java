@@ -21,8 +21,9 @@ public class UrlController {
     }
 
     @PostMapping("/api/v1/urls")
-    public ResponseEntity<UrlResponse> createShortUrl(@Valid @RequestBody CreateUrlRequest request) {
-        UrlResponse response = urlService.createShortUrl(request);
+    public ResponseEntity<UrlResponse> createShortUrl(@Valid @RequestBody CreateUrlRequest request,
+                                                        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        UrlResponse response = urlService.createShortUrl(request, idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

@@ -36,7 +36,7 @@ class UrlControllerTest {
     void createReturns201OnValidRequest() throws Exception {
         UrlResponse response = new UrlResponse("abc123", "http://localhost:8080/abc123",
                 "https://example.com", "owner-token", Instant.now(), null, true);
-        when(urlService.createShortUrl(any())).thenReturn(response);
+        when(urlService.createShortUrl(any(), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/urls")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -63,7 +63,7 @@ class UrlControllerTest {
 
     @Test
     void createReturns409WhenAliasAlreadyTaken() throws Exception {
-        when(urlService.createShortUrl(any())).thenThrow(new AliasAlreadyExistsException("taken"));
+        when(urlService.createShortUrl(any(), any())).thenThrow(new AliasAlreadyExistsException("taken"));
 
         mockMvc.perform(post("/api/v1/urls")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -73,7 +73,7 @@ class UrlControllerTest {
 
     @Test
     void createReturns429WhenCapReached() throws Exception {
-        when(urlService.createShortUrl(any())).thenThrow(new TooManyActiveUrlsException("cap reached"));
+        when(urlService.createShortUrl(any(), any())).thenThrow(new TooManyActiveUrlsException("cap reached"));
 
         mockMvc.perform(post("/api/v1/urls")
                         .contentType(MediaType.APPLICATION_JSON)
